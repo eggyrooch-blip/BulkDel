@@ -61,7 +61,6 @@ type RenderBundle = {
 };
 
 type ThemeModeType = 'LIGHT' | 'DARK';
-type FieldSortMode = 'structure' | 'modified-desc';
 
 const LOCAL_STORAGE_KEY = 'boom-table-shredder-snapshot';
 const BRIDGE_SNAPSHOT_KEY = 'boom.table-shredder.snapshot.v1';
@@ -83,6 +82,46 @@ const NON_PORTABLE_ROLLBACK_FIELD_TYPES: Set<FieldType> = new Set([
 ]);
 
 const fieldTypeDictionary = FieldType as unknown as Record<number, string>;
+
+const FIELD_TYPE_LABELS: Partial<Record<FieldType, string>> = {
+  [FieldType.Text]: '文本',
+  [FieldType.Number]: '数字',
+  [FieldType.SingleSelect]: '单选',
+  [FieldType.MultiSelect]: '多选',
+  [FieldType.DateTime]: '日期 / 时间',
+  [FieldType.Checkbox]: '勾选',
+  [FieldType.User]: '成员',
+  [FieldType.Phone]: '手机号',
+  [FieldType.Url]: '链接',
+  [FieldType.Attachment]: '附件',
+  [FieldType.SingleLink]: '关联（单向）',
+  [FieldType.DuplexLink]: '关联（双向）',
+  [FieldType.Lookup]: '回填',
+  [FieldType.Formula]: '公式',
+  [FieldType.Location]: '地理位置',
+  [FieldType.GroupChat]: '群聊',
+  [FieldType.Object]: '对象',
+  [FieldType.Progress]: '进度',
+  [FieldType.Currency]: '金额',
+  [FieldType.Rating]: '评分',
+  [FieldType.Email]: '邮箱',
+  [FieldType.CreatedTime]: '创建时间',
+  [FieldType.ModifiedTime]: '更新时间',
+  [FieldType.CreatedUser]: '创建人',
+  [FieldType.ModifiedUser]: '更新人',
+  [FieldType.AutoNumber]: '自动编号',
+  [FieldType.Barcode]: '条码 / 二维码',
+  [FieldType.NotSupport]: '暂不支持',
+  [FieldType.Denied]: '无权限',
+};
+
+const getFieldTypeLabel = (type: FieldType): string => {
+  return (
+    FIELD_TYPE_LABELS[type] ??
+    fieldTypeDictionary[type] ??
+    `类型 ${type}`
+  );
+};
 
 const cloneJson = <T,>(value: T | undefined): T | undefined => {
   if (value === undefined) {
@@ -135,58 +174,6 @@ const formatTimestamp = (input: string) => {
   }
 };
 
-const parseDateLikeValue = (value: unknown): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    if (value > 1_000_000_000_000) {
-      return value;
-    }
-    if (value > 1_000_000_000) {
-      return value * 1000;
-    }
-    if (value > 0) {
-      return value;
-    }
-  }
-  if (typeof value === 'string' && value.length > 0) {
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) {
-      return parsed;
-    }
-  }
-  return 0;
-};
-
-const getFieldModifiedTime = (field: IFieldMeta): number => {
-  const property = field.property as Record<string, unknown> | undefined;
-  const candidates: unknown[] = [
-    (field as unknown as Record<string, unknown>).modifiedTime,
-    (field as unknown as Record<string, unknown>).modified_time,
-    (field as unknown as Record<string, unknown>).updateTime,
-    (field as unknown as Record<string, unknown>).update_time,
-    (field as unknown as Record<string, unknown>).updatedAt,
-    (field as unknown as Record<string, unknown>).updated_at,
-    property?.modifiedTime,
-    property?.modified_time,
-    property?.updateTime,
-    property?.update_time,
-    property?.updatedAt,
-    property?.updated_at,
-    property?.lastModifiedTime,
-    property?.last_modified_time,
-    property?.lastModifyTime,
-    property?.last_modify_time,
-    property?.lastEditedTime,
-    property?.last_edited_time,
-  ];
-  for (const candidate of candidates) {
-    const timestamp = parseDateLikeValue(candidate);
-    if (timestamp > 0) {
-      return timestamp;
-    }
-  }
-  return 0;
-};
-
 export default function App() {
   const snapshotRef = useRef<Snapshot | null>(null);
   const [theme, setTheme] = useState<ThemeModeType>('DARK');
@@ -205,7 +192,6 @@ export default function App() {
   const [rollbackBusy, setRollbackBusy] = useState(false);
   const [tableQuery, setTableQuery] = useState('');
   const [fieldTypeFilter, setFieldTypeFilter] = useState<string>('all');
-  const [fieldSortMode, setFieldSortMode] = useState<FieldSortMode>('structure');
   const [selectionVersion, setSelectionVersion] = useState(0);
   const [snapshotDrawerVisible, setSnapshotDrawerVisible] = useState(false);
   const [deletePanelOpen, setDeletePanelOpen] = useState(false);
@@ -326,6 +312,10 @@ export default function App() {
     }
   }, []);
 
+  const handleManualRefresh = useCallback(() => {
+    refreshTables();
+  }, [refreshTables]);
+
   useEffect(() => {
     refreshTables();
   }, [refreshTables]);
@@ -417,29 +407,18 @@ export default function App() {
       for (const field of bundle.fields) {
         const key = String(field.type);
         if (!result.has(key)) {
-          result.set(
-            key,
-            fieldTypeDictionary[field.type] ?? `类型 ${field.type}`,
-          );
+          result.set(key, getFieldTypeLabel(field.type));
         }
       }
     }
-    return Array.from(result.entries()).map(([value, label]) => ({
-      value,
-      label,
-    }));
+    const sorted = Array.from(result.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'zh-Hans'));
+    return [{ value: 'all', label: '全部字段类型' }, ...sorted];
   }, [tables]);
 
   const renderBundles = useMemo<RenderBundle[]>(() => {
     const normalizedQuery = tableQuery.trim().toLowerCase();
-    const sortFields = (fields: IFieldMeta[]): IFieldMeta[] => {
-      if (fieldSortMode === 'structure') {
-        return fields;
-      }
-      return [...fields].sort(
-        (a, b) => getFieldModifiedTime(b) - getFieldModifiedTime(a),
-      );
-    };
     return tables
       .map((bundle) => {
         const tableName = bundle.meta.name ?? '无名表';
@@ -447,7 +426,7 @@ export default function App() {
           normalizedQuery.length === 0
             ? true
             : tableName.toLowerCase().includes(normalizedQuery);
-        const baseFields = bundle.fields.filter((field) => {
+        const visibleFields = bundle.fields.filter((field) => {
           if (
             fieldTypeFilter !== 'all' &&
             String(field.type) !== fieldTypeFilter
@@ -463,8 +442,7 @@ export default function App() {
           const fieldName = field.name ?? '无名字段';
           return fieldName.toLowerCase().includes(normalizedQuery);
         });
-        const visibleFields = sortFields(baseFields);
-        const shouldDisplay = tableMatches || baseFields.length > 0;
+        const shouldDisplay = tableMatches || visibleFields.length > 0;
         return {
           bundle,
           visibleFields,
@@ -473,7 +451,7 @@ export default function App() {
         };
       })
       .filter((item) => item.shouldDisplay);
-  }, [tables, tableQuery, fieldTypeFilter, fieldSortMode]);
+  }, [tables, tableQuery, fieldTypeFilter]);
 
   const toggleTable = useCallback((tableId: string) => {
     setSelectedTables((prev) => {
@@ -770,17 +748,17 @@ export default function App() {
           for (const field of tableSnap.fields) {
             if (BLOCKED_ROLLBACK_FIELD_TYPES.includes(field.type)) {
               errors.push(
-                `跳过系统字段 ${field.name}（类型 ${
-                  fieldTypeDictionary[field.type] ?? field.type
-                }）`,
+                `跳过系统字段 ${field.name}（类型 ${getFieldTypeLabel(
+                  field.type,
+                )}）`,
               );
               continue;
             }
             if (NON_PORTABLE_ROLLBACK_FIELD_TYPES.has(field.type)) {
               errors.push(
-                `复杂字段 ${field.name}（类型 ${
-                  fieldTypeDictionary[field.type] ?? field.type
-                }）暂不支持回滚`,
+                `复杂字段 ${field.name}（类型 ${getFieldTypeLabel(
+                  field.type,
+                )}）暂不支持回滚`,
               );
               continue;
             }
@@ -859,7 +837,6 @@ export default function App() {
     setSelectedFields(() => ({}));
     setTableQuery('');
     setFieldTypeFilter('all');
-    setFieldSortMode('structure');
     setSelectionVersion((prev) => prev + 1);
     Toast.info('选择已清空。');
   }, []);
@@ -893,39 +870,37 @@ export default function App() {
 
       <section className="filters">
         <div className="filters-inputs">
-          <Input
-            prefix={<IconSearch />}
-            placeholder="按表名 / 字段名检索"
-            value={tableQuery}
-            onChange={(value) => setTableQuery(value)}
-          />
-          <Select
-            placeholder="字段类型过滤"
-            value={fieldTypeFilter === 'all' ? undefined : fieldTypeFilter}
-            onChange={(value) =>
-              setFieldTypeFilter(
-                typeof value === 'string' && value.length > 0 ? value : 'all',
-              )
-            }
-            style={{ minWidth: 220 }}
-            optionList={availableFieldTypeOptions}
-          />
+          <div className="filters-field filters-field--search">
+            <Input
+              prefix={<IconSearch />}
+              placeholder="按表名 / 字段名检索"
+              value={tableQuery}
+              onChange={(value) => setTableQuery(value)}
+            />
+          </div>
+          <div className="filters-field filters-field--type">
+            <Select
+              placeholder="筛选字段类型（可搜索）"
+              value={fieldTypeFilter}
+              onChange={(value) => {
+                if (typeof value === 'string') {
+                  setFieldTypeFilter(value);
+                }
+              }}
+              renderSelectedItem={(item: Record<string, any>) => {
+                if (!item || item.value === 'all' || item.value === undefined) {
+                  return '全部字段类型';
+                }
+                return `字段类型：${item.label ?? ''}`;
+              }}
+              filter
+              showClear
+              onClear={() => setFieldTypeFilter('all')}
+              optionList={availableFieldTypeOptions}
+            />
+          </div>
         </div>
         <div className="filters-actions">
-          <Select
-            className="filters-sort"
-            value={fieldSortMode}
-            onChange={(value) => {
-              if (value === 'structure' || value === 'modified-desc') {
-                setFieldSortMode(value);
-              }
-            }}
-            style={{ minWidth: 220 }}
-            optionList={[
-              { value: 'structure', label: '按表结构排序' },
-              { value: 'modified-desc', label: '按最近修改排序' },
-            ]}
-          />
           <Button theme="light" onClick={selectVisibleTables}>
             全选表
           </Button>
@@ -945,31 +920,6 @@ export default function App() {
           </Button>
         </div>
       </section>
-
-      {/* 悬浮磁吸快照按钮 */}
-      <div className="snapshot-fab">
-        <Tooltip content={snapshot ? '查看快照信息' : '操作前自动快照'}>
-          <Button
-            type={snapshot ? 'primary' : 'tertiary'}
-            theme="solid"
-            icon={<IconCamera />}
-            onClick={() => setSnapshotDrawerVisible(true)}
-            className="snapshot-fab-button"
-            style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '50%',
-              boxShadow: snapshot
-                ? '0 4px 12px rgba(34, 197, 94, 0.4)'
-                : '0 4px 12px rgba(148, 163, 184, 0.3)',
-            }}
-          >
-            {snapshot && (
-              <span className="snapshot-fab-badge" />
-            )}
-          </Button>
-        </Tooltip>
-      </div>
 
       {/* 快照侧边栏面板 */}
       {snapshotDrawerVisible && (
@@ -1018,7 +968,7 @@ export default function App() {
                 <Tooltip content="刷新当前的表与字段清单">
                   <Button
                     icon={<IconRefresh />}
-                    onClick={refreshTables}
+                    onClick={handleManualRefresh}
                     loading={loading}
                     block
                   >
@@ -1059,24 +1009,49 @@ export default function App() {
           deletePanelOpen ? 'delete-bubble-open' : ''
         }`}
       >
-        <Tooltip
-          content={
-            deletePanelOpen
-              ? '收起删除面板'
-              : '查看删除统计并执行一键清理'
-          }
-          position="left"
-        >
-          <Button
-            className="delete-bubble__trigger"
-            theme="solid"
-            type="danger"
-            icon={<IconDeleteStroked />}
-            onClick={() => setDeletePanelOpen((prev) => !prev)}
+        <div className="floating-actions">
+          <Tooltip
+            content={
+              deletePanelOpen
+                ? '收起删除面板'
+                : '查看删除统计并执行一键清理'
+            }
+            position="left"
           >
-            <span className="delete-bubble__count">{totalSelectedTargets}</span>
-          </Button>
-        </Tooltip>
+            <Button
+              className="floating-action-button floating-action-button--delete"
+              theme="solid"
+              type="danger"
+              icon={<IconDeleteStroked />}
+              onClick={() => setDeletePanelOpen((prev) => !prev)}
+            >
+              <span className="delete-bubble__count">
+                {totalSelectedTargets}
+              </span>
+            </Button>
+          </Tooltip>
+          <Tooltip content={loading ? '刷新中…' : '手动刷新数据表'}>
+            <Button
+              type="tertiary"
+              theme="solid"
+              icon={<IconRefresh />}
+              onClick={handleManualRefresh}
+              loading={loading}
+              disabled={loading}
+              aria-label="手动刷新数据表"
+              className="floating-action-button floating-action-button--refresh"
+            />
+          </Tooltip>
+          <Tooltip content={snapshot ? '查看快照信息' : '操作前自动快照'}>
+            <Button
+              type={snapshot ? 'primary' : 'tertiary'}
+              theme="solid"
+              icon={<IconCamera />}
+              onClick={() => setSnapshotDrawerVisible(true)}
+              className="floating-action-button floating-action-button--snapshot"
+            />
+          </Tooltip>
+        </div>
         {deletePanelOpen && (
           <section className="delete-panel">
             <div className="delete-panel__header">
@@ -1184,9 +1159,7 @@ export default function App() {
                     visibleFields.map((field) => {
                       const isFieldSelected =
                         !!tableFieldSelections[field.id];
-                      const fieldTypeName =
-                        fieldTypeDictionary[field.type] ??
-                        `类型 ${field.type}`;
+                      const fieldTypeName = getFieldTypeLabel(field.type);
                       const isIndexField = field.isPrimary === true;
                       const checkbox = (
                         <Checkbox
