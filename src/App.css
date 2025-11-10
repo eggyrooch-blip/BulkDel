@@ -135,6 +135,15 @@ body.theme-light {
   flex-shrink: 0;
 }
 
+.filters-actions .semi-select {
+  background: var(--input-bg);
+  border-radius: 12px;
+}
+
+.filters-actions .semi-select-selection {
+  border-radius: 12px;
+}
+
 /* 悬浮磁吸快照按钮 */
 .snapshot-fab {
   position: fixed;
@@ -259,24 +268,84 @@ body.theme-light {
   gap: 12px;
 }
 
-.delete-panel {
+.delete-bubble {
+  position: fixed;
+  top: 160px;
+  right: 24px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 16px;
-  padding: 18px 20px;
+  z-index: 980;
+}
+
+.delete-bubble-open {
+  transform: translateX(0);
+}
+
+.delete-bubble__trigger {
+  width: 64px;
+  height: 64px;
+  border-radius: 50% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 24px rgba(248, 113, 113, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.delete-bubble__trigger:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 16px 32px rgba(248, 113, 113, 0.45);
+}
+
+.delete-bubble__count {
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 24px;
+  text-align: center;
+}
+
+.delete-panel {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
   background: var(--delete-bg);
   border: 1px solid var(--delete-border);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--delete-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.delete-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.delete-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .delete-panel__metrics {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  gap: 8px;
+}
+
+.delete-panel__hint {
+  display: block;
+}
+
+.delete-panel__actions {
+  display: flex;
   gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .confirm-content {
@@ -387,12 +456,18 @@ body.theme-light {
   .filters-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
   }
 
   .filters-inputs {
     flex-direction: column;
     align-items: stretch;
     flex-wrap: wrap;
+  }
+
+  .filters-actions .semi-select {
+    flex: 1 1 180px;
   }
 
   .snapshot-fab {
@@ -405,9 +480,18 @@ body.theme-light {
     height: 48px !important;
   }
 
+  .delete-bubble {
+    top: auto;
+    bottom: 128px;
+    right: 16px;
+  }
+
   .delete-panel {
-    flex-direction: column;
-    align-items: stretch;
+    width: min(320px, calc(100vw - 48px));
+  }
+
+  .delete-panel__actions {
+    justify-content: flex-start;
   }
 
   .table-list {

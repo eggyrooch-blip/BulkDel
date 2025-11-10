@@ -8,9 +8,7 @@ import {
 } from '@lark-base-open/js-sdk';
 import {
   Button,
-  Card,
   Checkbox,
-  Divider,
   Empty,
   Input,
   Modal,
@@ -63,6 +61,7 @@ type RenderBundle = {
 };
 
 type ThemeModeType = 'LIGHT' | 'DARK';
+type FieldSortMode = 'structure' | 'modified-desc';
 
 const LOCAL_STORAGE_KEY = 'boom-table-shredder-snapshot';
 const BRIDGE_SNAPSHOT_KEY = 'boom.table-shredder.snapshot.v1';
@@ -136,6 +135,58 @@ const formatTimestamp = (input: string) => {
   }
 };
 
+const parseDateLikeValue = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value > 1_000_000_000_000) {
+      return value;
+    }
+    if (value > 1_000_000_000) {
+      return value * 1000;
+    }
+    if (value > 0) {
+      return value;
+    }
+  }
+  if (typeof value === 'string' && value.length > 0) {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+};
+
+const getFieldModifiedTime = (field: IFieldMeta): number => {
+  const property = field.property as Record<string, unknown> | undefined;
+  const candidates: unknown[] = [
+    (field as unknown as Record<string, unknown>).modifiedTime,
+    (field as unknown as Record<string, unknown>).modified_time,
+    (field as unknown as Record<string, unknown>).updateTime,
+    (field as unknown as Record<string, unknown>).update_time,
+    (field as unknown as Record<string, unknown>).updatedAt,
+    (field as unknown as Record<string, unknown>).updated_at,
+    property?.modifiedTime,
+    property?.modified_time,
+    property?.updateTime,
+    property?.update_time,
+    property?.updatedAt,
+    property?.updated_at,
+    property?.lastModifiedTime,
+    property?.last_modified_time,
+    property?.lastModifyTime,
+    property?.last_modify_time,
+    property?.lastEditedTime,
+    property?.last_edited_time,
+  ];
+  for (const candidate of candidates) {
+    const timestamp = parseDateLikeValue(candidate);
+    if (timestamp > 0) {
+      return timestamp;
+    }
+  }
+  return 0;
+};
+
 export default function App() {
   const snapshotRef = useRef<Snapshot | null>(null);
   const [theme, setTheme] = useState<ThemeModeType>('DARK');
@@ -154,8 +205,10 @@ export default function App() {
   const [rollbackBusy, setRollbackBusy] = useState(false);
   const [tableQuery, setTableQuery] = useState('');
   const [fieldTypeFilter, setFieldTypeFilter] = useState<string>('all');
+  const [fieldSortMode, setFieldSortMode] = useState<FieldSortMode>('structure');
   const [selectionVersion, setSelectionVersion] = useState(0);
   const [snapshotDrawerVisible, setSnapshotDrawerVisible] = useState(false);
+  const [deletePanelOpen, setDeletePanelOpen] = useState(false);
 
   const selectedTableCount = useMemo(
     () => Object.values(selectedTables).filter(Boolean).length,
@@ -379,6 +432,14 @@ export default function App() {
 
   const renderBundles = useMemo<RenderBundle[]>(() => {
     const normalizedQuery = tableQuery.trim().toLowerCase();
+    const sortFields = (fields: IFieldMeta[]): IFieldMeta[] => {
+      if (fieldSortMode === 'structure') {
+        return fields;
+      }
+      return [...fields].sort(
+        (a, b) => getFieldModifiedTime(b) - getFieldModifiedTime(a),
+      );
+    };
     return tables
       .map((bundle) => {
         const tableName = bundle.meta.name ?? '无名表';
@@ -386,11 +447,11 @@ export default function App() {
           normalizedQuery.length === 0
             ? true
             : tableName.toLowerCase().includes(normalizedQuery);
-        const visibleFields = bundle.fields.filter((field) => {
-          const matchesType =
-            fieldTypeFilter === 'all' ||
-            String(field.type) === fieldTypeFilter;
-          if (!matchesType) {
+        const baseFields = bundle.fields.filter((field) => {
+          if (
+            fieldTypeFilter !== 'all' &&
+            String(field.type) !== fieldTypeFilter
+          ) {
             return false;
           }
           if (normalizedQuery.length === 0) {
@@ -402,24 +463,17 @@ export default function App() {
           const fieldName = field.name ?? '无名字段';
           return fieldName.toLowerCase().includes(normalizedQuery);
         });
-        const shouldDisplay = tableMatches || visibleFields.length > 0;
+        const visibleFields = sortFields(baseFields);
+        const shouldDisplay = tableMatches || baseFields.length > 0;
         return {
           bundle,
-          visibleFields:
-            tableMatches && normalizedQuery.length === 0
-              ? bundle.fields.filter((field) => {
-                  return (
-                    fieldTypeFilter === 'all' ||
-                    String(field.type) === fieldTypeFilter
-                  );
-                })
-              : visibleFields,
+          visibleFields,
           tableMatches,
           shouldDisplay,
         };
       })
       .filter((item) => item.shouldDisplay);
-  }, [tables, tableQuery, fieldTypeFilter]);
+  }, [tables, tableQuery, fieldTypeFilter, fieldSortMode]);
 
   const toggleTable = useCallback((tableId: string) => {
     setSelectedTables((prev) => {
@@ -805,6 +859,7 @@ export default function App() {
     setSelectedFields(() => ({}));
     setTableQuery('');
     setFieldTypeFilter('all');
+    setFieldSortMode('structure');
     setSelectionVersion((prev) => prev + 1);
     Toast.info('选择已清空。');
   }, []);
@@ -857,6 +912,20 @@ export default function App() {
           />
         </div>
         <div className="filters-actions">
+          <Select
+            className="filters-sort"
+            value={fieldSortMode}
+            onChange={(value) => {
+              if (value === 'structure' || value === 'modified-desc') {
+                setFieldSortMode(value);
+              }
+            }}
+            style={{ minWidth: 220 }}
+            optionList={[
+              { value: 'structure', label: '按表结构排序' },
+              { value: 'modified-desc', label: '按最近修改排序' },
+            ]}
+          />
           <Button theme="light" onClick={selectVisibleTables}>
             全选表
           </Button>
@@ -985,48 +1054,86 @@ export default function App() {
         </>
       )}
 
-      <section className="delete-panel">
-        <div className="delete-panel__metrics">
-          <Tag size="large">
-            已选表：{selectedTableCount}
-          </Tag>
-          <Tag size="large">
-            已选字段：{selectedFieldCount}
-          </Tag>
-          <Tag size="large">
-            快照：{snapshot ? `已保存 · ${snapshot.label}` : '未创建'}
-          </Tag>
-          <Divider layout="vertical" />
-          <Typography.Text type="tertiary">
-            当前筛选：{renderBundles.length} 张表
-          </Typography.Text>
-        </div>
-        <Popconfirm
-          title="终极确认：删除所选表和字段？"
+      <aside
+        className={`delete-bubble ${
+          deletePanelOpen ? 'delete-bubble-open' : ''
+        }`}
+      >
+        <Tooltip
           content={
-            <div className="confirm-content">
-              <p>· 操作不可撤销，数据将瞬间蒸发。</p>
-              <p>· 请确认：备份与权限都准备妥当。</p>
-              <p>
-                · 目标：{selectedTableCount} 张表，{selectedFieldCount} 个字段。
-              </p>
-            </div>
+            deletePanelOpen
+              ? '收起删除面板'
+              : '查看删除统计并执行一键清理'
           }
           position="left"
-          onConfirm={handleDelete}
-          disabled={totalSelectedTargets === 0}
         >
           <Button
+            className="delete-bubble__trigger"
             theme="solid"
             type="danger"
             icon={<IconDeleteStroked />}
-            loading={deleteBusy}
-            disabled={totalSelectedTargets === 0}
+            onClick={() => setDeletePanelOpen((prev) => !prev)}
           >
-            一键清理（{totalSelectedTargets}）
+            <span className="delete-bubble__count">{totalSelectedTargets}</span>
           </Button>
-        </Popconfirm>
-      </section>
+        </Tooltip>
+        {deletePanelOpen && (
+          <section className="delete-panel">
+            <div className="delete-panel__header">
+              <Typography.Text strong>一键清理</Typography.Text>
+              <Button
+                type="tertiary"
+                theme="borderless"
+                icon={<IconClose />}
+                onClick={() => setDeletePanelOpen(false)}
+                style={{ minWidth: 'auto', padding: '4px' }}
+              />
+            </div>
+            <div className="delete-panel__body">
+              <div className="delete-panel__metrics">
+                <Tag size="large">已选表：{selectedTableCount}</Tag>
+                <Tag size="large">已选字段：{selectedFieldCount}</Tag>
+                <Tag size="large">
+                  快照：{snapshot ? `已保存 · ${snapshot.label}` : '未创建'}
+                </Tag>
+              </div>
+              <Typography.Text type="tertiary" className="delete-panel__hint">
+                当前筛选：{renderBundles.length} 张表
+              </Typography.Text>
+            </div>
+            <div className="delete-panel__actions">
+              <Button theme="light" onClick={clearSelections}>
+                清空选择
+              </Button>
+              <Popconfirm
+                title="终极确认：删除所选表和字段？"
+                content={
+                  <div className="confirm-content">
+                    <p>· 操作不可撤销，数据将瞬间蒸发。</p>
+                    <p>· 请确认：备份与权限都准备妥当。</p>
+                    <p>
+                      · 目标：{selectedTableCount} 张表，{selectedFieldCount} 个字段。
+                    </p>
+                  </div>
+                }
+                position="left"
+                onConfirm={handleDelete}
+                disabled={totalSelectedTargets === 0}
+              >
+                <Button
+                  theme="solid"
+                  type="danger"
+                  icon={<IconDeleteStroked />}
+                  loading={deleteBusy}
+                  disabled={totalSelectedTargets === 0}
+                >
+                  一键清理（{totalSelectedTargets}）
+                </Button>
+              </Popconfirm>
+            </div>
+          </section>
+        )}
+      </aside>
 
       <main className="table-list">
         {loading ? (
