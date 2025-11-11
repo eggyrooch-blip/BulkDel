@@ -2,44 +2,7 @@
 
 :root {
   font-family: 'Inter', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
-  --app-background: linear-gradient(135deg, #1f1147 0%, #0f172a 45%, #111827 100%);
-  --text-primary: #f1f5f9;
-  --text-muted: #f8fafc;
-  --text-tertiary: rgba(226, 232, 240, 0.78);
-  --banner-bg: rgba(239, 68, 68, 0.12);
-  --banner-border: rgba(248, 113, 113, 0.6);
-  --banner-text: #fee2e2;
-  --input-bg: rgba(15, 23, 42, 0.75);
-  --card-bg: rgba(15, 23, 42, 0.82);
-  --card-border: rgba(248, 113, 113, 0.18);
-  --card-shadow: 0 18px 40px rgba(15, 23, 42, 0.55);
-  --delete-bg: rgba(248, 113, 113, 0.12);
-  --delete-border: rgba(248, 113, 113, 0.32);
-  --delete-shadow: 0 14px 32px rgba(248, 113, 113, 0.16);
-  --table-card-bg: rgba(15, 23, 42, 0.72);
-  --table-card-border: rgba(148, 163, 184, 0.25);
-  --table-card-hover-shadow: 0 12px 32px rgba(15, 23, 42, 0.45);
-  --field-row-bg: rgba(30, 41, 59, 0.8);
-  --field-border-selected: rgba(252, 165, 165, 0.8);
-  --field-selected-bg: rgba(244, 63, 94, 0.18);
-  --field-empty-bg: rgba(15, 23, 42, 0.6);
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--app-background);
-  color: var(--text-primary);
-  transition: background 0.3s ease;
-}
-
-body.theme-dark {
-  color-scheme: dark;
-}
-
-body.theme-light {
-  color-scheme: light;
-  --app-background: linear-gradient(135deg, #fef3c7 0%, #f8fafc 50%, #e2e8f0 100%);
+  --app-background: #ffffff;
   --text-primary: #111827;
   --text-muted: #374151;
   --text-tertiary: #475569;
@@ -60,6 +23,23 @@ body.theme-light {
   --field-border-selected: rgba(244, 63, 94, 0.6);
   --field-selected-bg: rgba(254, 226, 226, 0.85);
   --field-empty-bg: rgba(241, 245, 249, 0.9);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--app-background);
+  color: var(--text-primary);
+  transition: background 0.3s ease;
+}
+
+body.theme-dark {
+  color-scheme: dark;
+}
+
+body.theme-light {
+  color-scheme: light;
+  --app-background: #ffffff;
 }
 
 .app-shell {

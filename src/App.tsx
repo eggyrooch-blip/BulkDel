@@ -176,7 +176,7 @@ const formatTimestamp = (input: string) => {
 
 export default function App() {
   const snapshotRef = useRef<Snapshot | null>(null);
-  const [theme, setTheme] = useState<ThemeModeType>('DARK');
+  const [theme, setTheme] = useState<ThemeModeType>('LIGHT');
   const [loading, setLoading] = useState(true);
   const [tables, setTables] = useState<TableBundle[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -220,10 +220,7 @@ export default function App() {
     const initTheme = async () => {
       if (bridge && typeof bridge.getTheme === 'function') {
         try {
-          const current = await bridge.getTheme();
-          if (current === 'LIGHT' || current === 'DARK') {
-            setTheme(current);
-          }
+          await bridge.getTheme();
         } catch (error) {
           console.warn('获取主题失败', error);
         }
@@ -232,8 +229,8 @@ export default function App() {
         try {
           off = bridge.onThemeChange((event: any) => {
             const next = event?.data?.theme;
-            if (next === 'LIGHT' || next === 'DARK') {
-              setTheme(next);
+            if (next === 'LIGHT') {
+              setTheme('LIGHT');
             }
           });
         } catch (error) {
